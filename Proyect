@@ -1,0 +1,314 @@
+PROCESSOR 16F887
+#include <xc.inc>
+
+;configuration word 1
+    CONFIG FOSC=INTRC_NOCLKOUT //OSCILADOR INTERNO SIN SALIDAS
+    CONFIG WDTE=OFF // WDT DISABLE (REINICIO REPETITIVO DE PIC)
+    CONFIG PWRTE=OFF // PWRT enableinterrupciones (ESPERA DE 72MS AL INICIAR)
+    CONFIG MCLRE=OFF //EL PIN DE MCLR SE USA COMO I/O
+    CONFIG CP=OFF //SIN PROTECCIÓN DE CÓDIGO
+    CONFIG CPD=OFF //SIN PROTECCIÓN DE DATOS
+    
+    CONFIG BOREN=OFF //SIN REINICIO CUANDO EL V DE ALIMENTACIÓN BAJA A 4V
+    CONFIG IESO=OFF // REINICIO SIN CAMBIO DE RELOJ INTERNO A EXTERNO
+    CONFIG FCMEN=OFF // CAMBBIO DE RELOJ EXTERNO A INTERNO EN CASO DE FALLO
+    CONFIG LVP=OFF //PROGRAMACIÓN EN BAJO VOLTAJE PERMITIDA
+    
+    ;CONFIGURATION WORD 2
+    CONFIG WRT=OFF //PROTECCIÓN DE AUTOESCRITURA POR EL PROGRAMA DESACTIVADA
+    CONFIG BOR4V=BOR40V //REINICIO ABAJO DE 4, (BOR21V=2.1V)
+    PSECT udata_bank0 ;common memory
+
+    
+//Instrucciones del vector del reset
+PSECT resVect, class=CODE, abs, delta=2 
+ORG 00h
+reset_vec:
+    PAGESEL main
+    goto main
+
+// Declaración de variables a utilizar
+registrotempo: DS 1		
+statustempo: DS 1
+Frq: DS 1
+Crg: DS 1
+flag: DS 1
+DISP: DS 4
+contador: DS 1
+ 
+
+//Ponemos las interrupciones
+ORG 004h
+    
+ISR:		
+    btfsc   RBIF
+    call    interruption_iocb
+    btfsc   T0IF
+    call    Tmr0_interruption
+PUSH:	
+    movwf registrotempo		
+    swapf STATUS, W		
+    movwf statustempo		   
+POP:
+    swapf statustempo, W	
+    movwf STATUS		
+    swapf registrotempo, F
+    swapf registrotempo, W	    
+    retfie			
+    
+Tmr0_interruption:
+    call Tmr0_reset           
+    btfss PORTB, 0 
+    call onda_triangular
+    btfss PORTB, 1
+    call onda_sinusoidal
+    btfss PORTB, 2
+    call onda_cuadrada
+    btfss PORTB, 3
+    call  onda_sierra
+    return
+	
+interruption_iocb:
+    BANKSEL PORTA
+    btfss   PORTB, 4
+    call    aum_freq
+    btfss   PORTB, 5
+    call    dec_freq
+    bcf	    RBIF
+    RETURN 
+//Funciones para las gráficas   
+onda_cuadrada:
+    incf contador
+    movf contador, W
+    call ondacuadrada
+    movwf PORTA
+    return
+    
+onda_triangular:
+    incf contador
+    movf contador,W
+    call ondatriangular
+    movwf PORTA
+    return
+   
+onda_sinusoidal:
+    incf contador
+    movf contador,W
+    call ondasinusoidal
+    movwf PORTA
+    return
+
+onda_sierra:
+    incf contador
+    movf contador,W
+    call ondasierra
+    movwf PORTA
+    return
+
+
+PSECT code, delta=2, abs
+ORG 0100h	
+
+//Tablas
+tabla1:
+ clrf    PCLATH
+ bsf	 PCLATH, 0
+ andlw	 00001111B
+ addwf   PCL		   
+ retlw   00111111B	    ; 0	  
+ retlw   00000110B	    ; 1	    
+ retlw   01011011B	    ; 2	  
+ retlw   01001111B	    ; 3	    
+ retlw   01100110B	    ; 4	  
+ retlw   01101101B	    ; 5	   
+ retlw   01111101B	    ; 6
+ retlw   01000111B	    ; 7
+ retlw   01111111B	    ; 8
+ retlw   01100111B	    ; 9
+ retlw   01110111B	    ; A
+ retlw   01111100B	    ; b
+ retlw   00111001B	    ; c
+ retlw   01011110B	    ; d
+ retlw   01111001B	    ; E
+ retlw   01110001B	    ; F
+ return
+
+//Tabla de Ondas
+ondatriangular:
+    clrf PCLATH
+    bsf	 PCLATH, 0         
+    andlw 0x0f
+    addwf   PCL		    
+    retlw   32	        
+    retlw   64	    
+    retlw   96	    	    
+    retlw   128	    	    
+    retlw   159	    
+    retlw   191	    
+    retlw   223    
+    retlw   255    
+    retlw   223	    
+    retlw   191    
+    retlw   159	    
+    retlw   128	    
+    retlw   96	    
+    retlw   64
+    retlw   32	        
+    retlw   0	    
+    return 
+    
+ondacuadrada:
+    clrf    PCLATH
+    bsf	    PCLATH, 0          
+    andlw   0x0f
+    addwf   PCL		    
+    retlw   0
+    retlw   0
+    retlw   0
+    retlw   0
+    retlw   0
+    retlw   0
+    retlw   0
+    retlw   0
+    retlw   255
+    retlw   255
+    retlw   255
+    retlw   255
+    retlw   255
+    retlw   255
+    retlw   255
+    retlw   255
+    return 
+    
+ondasinusoidal:
+    clrf PCLATH
+    bsf	 PCLATH, 0          
+    andlw 0x0f
+    addwf   PCL		    	    
+    retlw   128	    
+    retlw   176	    
+    retlw   218	    
+    retlw   245   
+    retlw   255	    
+    retlw   245	    
+    retlw   218	    
+    retlw   176
+    retlw   128	        
+    retlw   79	    
+    retlw   37	    	    
+    retlw   10	    
+    retlw   0	    
+    retlw   10	    
+    retlw   37	    
+    retlw   79	    
+    return
+    
+ondasierra:
+    clrf PCLATH
+    bsf	 PCLATH, 0          
+    andlw 0x0f
+    addwf   PCL		   
+    retlw   0	        
+    retlw   17	    	    
+    retlw   34	    
+    retlw   51	    
+    retlw   68    
+    retlw   85  
+    retlw   102
+    retlw   119	    
+    retlw   136   
+    retlw   153   
+    retlw   170	    
+    retlw   187
+    retlw   204	    
+    retlw   221
+    retlw   238	        
+    retlw   255	     
+    return 
+    
+main:
+//Declaramos los pines digitales
+    banksel ANSEL	
+    clrf    ANSEL	
+    clrf    ANSELH
+//Declaramos los puertos A como salidas   
+    banksel TRISA	
+    clrf    TRISA	
+    clrf    TRISD
+    clrf    TRISC
+    
+    banksel TRISE
+    clrf    TRISE
+   
+//Declaración de botones para las gráficas
+    bsf TRISB, 0		    //Botón de onda Triangular
+    bsf TRISB, 1		    //Botón de onda sinusoidal
+    bsf TRISB, 2		    //Botón onda cuadrada
+    bsf TRISB, 3		    //Botón onda sierra
+
+    bcf OPTION_REG, 7
+    bsf WPUB, 0
+    bsf WPUB, 1
+    bsf WPUB, 2
+    bsf WPUB, 3
+    bsf WPUB, 4
+    bsf WPUB, 5
+    bsf WPUB, 6
+    bsf WPUB, 7
+//Frecuencia del oscilador en 4Mhz
+    BANKSEL OSCCON		    
+    bcf OSCCON, 3		    
+    bcf OSCCON, 4
+    bsf OSCCON, 5
+    bsf OSCCON, 6
+	
+    banksel TRISA
+    bsf IOCB, 0			   
+    bsf IOCB, 1			    
+    bsf IOCB, 2			    
+    bsf IOCB, 3			   
+    bsf IOCB, 4			    
+    bsf IOCB, 5			    
+    bsf IOCB, 6			    
+    bsf IOCB, 7			    
+    
+    BANKSEL PORTA
+    movf PORTB, W
+    bcf RBIF
+	
+    call enableinterrupciones
+    call timer0
+
+    BANKSEL PORTA	
+    clrf PORTA
+    clrf PORTB
+    clrf PORTD
+    clrf PORTC
+    clrf contador			    
+
+timer0:
+    BANKSEL OPTION_REG
+    bcf	    T0CS
+    bcf	    T0SE		   
+    bcf	    PSA
+    bcf	    PS2
+    bcf	    PS1
+    bsf	    PS0      
+    BANKSEL PORTA
+    return
+//se inicia una cuenta otra vez	
+Tmr0_reset:
+    movf    Crg, W
+    movwf   TMR0    
+    bcf	    T0IF    
+    return
+//Enable en las interrupciones del Pic    
+enableinterrupciones:			
+    bsf	    GIE			
+    bsf	    RBIE
+    bcf	    RBIF
+    bsf	    T0IE
+    bcf	    T0IF
+    return
+
+END
